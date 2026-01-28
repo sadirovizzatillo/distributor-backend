@@ -1,8 +1,20 @@
-import { NestFactory } from '@nestjs/core';
-import { AppModule } from './app.module';
+import { NestFactory } from "@nestjs/core";
+import { AppModule } from "./app.module";
+import { ValidationPipe } from "@nestjs/common";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  await app.listen(3000);
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true, // strip unknown properties
+      forbidNonWhitelisted: true, // throw error if unknown props sent
+      transform: true,
+      transformOptions: {
+        enableImplicitConversion: true
+      }
+    })
+  );
+  await app.listen(3001);
+  console.log("🚀 Server running on http://localhost:3001");
 }
 bootstrap();

@@ -1,0 +1,65 @@
+import { Injectable } from "@nestjs/common";
+import { db } from "../db/db";
+import { products } from "../db/schema";
+import { eq } from "drizzle-orm";
+import { CreateProductDto } from "./dto/create-product.dto";
+import { UpdateProductDto } from "./dto/update-product.dto";
+
+@Injectable()
+export class ProductsService {
+
+  async findAllByUserId(userId: string) {
+    return db
+      .select()
+      .from(products)
+      .where(eq(products.userId, Number(userId)));
+  }
+
+  async findAll() {
+    return db.select().from(products);
+  }
+
+  async findOne(id: number) {
+    const [product] = await db
+      .select()
+      .from(products)
+      .where(eq(products.id, id));
+    return product;
+  }
+
+  async create(data: CreateProductDto) {
+    const createData: any = { ...data };
+
+    if (createData.price !== undefined && createData.price !== null) {
+      createData.price = String(createData.price);
+    }
+
+    const [newProduct] = await db
+      .insert(products)
+      .values(createData)
+      .returning();
+
+    return newProduct;
+  }
+
+  async update(id: number, data: UpdateProductDto) {
+    const updateData: any = { ...data };
+
+    if (updateData.price !== undefined && updateData.price !== null) {
+      updateData.price = String(updateData.price); // safe conversion
+    }
+
+    const [updatedProduct] = await db
+      .update(products)
+      .set(updateData)
+      .where(eq(products.id, id))
+      .returning();
+
+    return updatedProduct;
+  }
+
+  async remove(id: number) {
+    await db.delete(products).where(eq(products.id, id));
+    return { message: "Product deleted" };
+  }
+}
