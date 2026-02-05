@@ -12,6 +12,7 @@ import { EmployeeModule } from "./employees/employees.module";
 import { PaymentModule } from "./payments/payment.module";
 import { StatisticsModule } from "./statistics/statistics.module";
 import { AdminModule } from "./admin/admin.module";
+import { DistributorModule } from "./distributor/distributor.module";
 
 @Module({
   imports: [
@@ -26,7 +27,8 @@ import { AdminModule } from "./admin/admin.module";
     EmployeeModule,
     PaymentModule,
     StatisticsModule,
-    AdminModule
+    AdminModule,
+    DistributorModule
     // TelegramModule
   ]
 })
