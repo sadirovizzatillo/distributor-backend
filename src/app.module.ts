@@ -11,6 +11,7 @@ import { EmployeeModule } from "./employees/employees.module";
 // import { TelegramModule } from "./telegram/telegram.module";
 import { PaymentModule } from "./payments/payment.module";
 import { StatisticsModule } from "./statistics/statistics.module";
+import { AdminModule } from "./admin/admin.module";
 
 @Module({
   imports: [
@@ -24,7 +25,8 @@ import { StatisticsModule } from "./statistics/statistics.module";
     TransactionsModule,
     EmployeeModule,
     PaymentModule,
-    StatisticsModule
+    StatisticsModule,
+    AdminModule
     // TelegramModule
   ]
 })
