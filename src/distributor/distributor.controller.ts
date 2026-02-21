@@ -24,6 +24,15 @@ import {
 export class DistributorController {
   constructor(private readonly distributorService: DistributorService) {}
 
+  // Statistics - Unified endpoint for Statistics page
+  @Get("statistics")
+  getStatistics(@Req() req: any, @Query("days") days?: string) {
+    return this.distributorService.getStatistics(
+      req.user.id,
+      days ? Number(days) : 30
+    );
+  }
+
   // Dashboard - Personal overview
   @Get("dashboard")
   getDashboard(@Req() req: any) {

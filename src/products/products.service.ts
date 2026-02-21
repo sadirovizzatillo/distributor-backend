@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { db } from "../db/db";
 import { products } from "../db/schema";
 import { eq } from "drizzle-orm";
@@ -27,6 +27,15 @@ export class ProductsService {
     return product;
   }
 
+  async verifyOwnership(productId: number, userId: number) {
+    const product = await this.findOne(productId);
+    if (!product) throw new NotFoundException("Product not found");
+    if (product.userId !== userId) {
+      throw new ForbiddenException("Access denied");
+    }
+    return product;
+  }
+
   async create(data: CreateProductDto) {
     const createData: any = { ...data };
 
@@ -46,7 +55,7 @@ export class ProductsService {
     const updateData: any = { ...data };
 
     if (updateData.price !== undefined && updateData.price !== null) {
-      updateData.price = String(updateData.price); // safe conversion
+      updateData.price = String(updateData.price);
     }
 
     const [updatedProduct] = await db

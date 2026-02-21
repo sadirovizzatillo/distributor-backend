@@ -7,6 +7,7 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   UseGuards
 } from "@nestjs/common";
 import { ShopsService } from "./shops.service";
@@ -20,16 +21,23 @@ export class ShopsController {
   constructor(private readonly shopsService: ShopsService) {}
 
   @Post()
-  create(@Body() dto: CreateShopDto) {
+  create(@Req() req: any, @Body() dto: CreateShopDto) {
+    const user = req.user;
+    if (user.role !== "admin") {
+      dto.userId = user.id;
+    }
     return this.shopsService.create(dto);
   }
 
   @Get()
-  findAllByUserId(@Query("userId") userId: string) {
-    if (userId) {
-      return this.shopsService.findAllByUserId(userId);
+  findAllByUserId(@Req() req: any, @Query("userId") userId: string) {
+    const user = req.user;
+    if (user.role === "admin") {
+      return userId
+        ? this.shopsService.findAllByUserId(userId)
+        : this.shopsService.findAll();
     }
-    return this.shopsService.findAll();
+    return this.shopsService.findAllByUserId(String(user.id));
   }
 
   @Get(":id")
@@ -38,12 +46,20 @@ export class ShopsController {
   }
 
   @Patch(":id")
-  update(@Param("id") id: string, @Body() dto: UpdateShopDto) {
+  async update(@Req() req: any, @Param("id") id: string, @Body() dto: UpdateShopDto) {
+    const user = req.user;
+    if (user.role !== "admin") {
+      await this.shopsService.verifyOwnership(Number(id), user.id);
+    }
     return this.shopsService.update(Number(id), dto);
   }
 
   @Delete(":id")
-  remove(@Param("id") id: string) {
+  async remove(@Req() req: any, @Param("id") id: string) {
+    const user = req.user;
+    if (user.role !== "admin") {
+      await this.shopsService.verifyOwnership(Number(id), user.id);
+    }
     return this.shopsService.remove(Number(id));
   }
 }

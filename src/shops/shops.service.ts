@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { db } from "../db/db";
 import { shops } from "../db/schema";
 import { eq } from "drizzle-orm";
@@ -47,8 +47,15 @@ export class ShopsService {
     return result[0];
   }
 
+  async verifyOwnership(shopId: number, userId: number) {
+    const shop = await this.findOne(shopId);
+    if (shop.userId !== userId) {
+      throw new ForbiddenException("Access denied");
+    }
+    return shop;
+  }
+
   async findAllByUserId(userId: string) {
-    console.log(userId);
     return db
       .select()
       .from(shops)

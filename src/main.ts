@@ -4,6 +4,10 @@ import { ValidationPipe } from "@nestjs/common";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Add global api prefix
+  app.setGlobalPrefix("api");
+
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true, // strip unknown properties
@@ -14,7 +18,8 @@ async function bootstrap() {
       }
     })
   );
-  await app.listen(3001);
-  console.log("🚀 Server running on http://localhost:3001");
+  await app.listen(3000);
+  console.log("🚀 Server running on http://localhost:3000");
+  console.log("📡 API available at http://localhost:3000/api");
 }
 bootstrap();

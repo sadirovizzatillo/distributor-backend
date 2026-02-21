@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Delete,
+  ForbiddenException,
   ValidationPipe,
   UseGuards,
   Req
@@ -24,13 +25,12 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get()
-  findAll() {
-    return this.usersService.findAll();
-  }
-
-  @Get(":id")
-  findOne(@Param("id") id: string) {
-    return this.usersService.findOne(+id);
+  findAll(@Req() req: any) {
+    const user = req.user;
+    if (user.role === "admin") {
+      return this.usersService.findAll();
+    }
+    return this.usersService.findOne(user.id);
   }
 
   @Get("/me/p")
@@ -38,17 +38,39 @@ export class UsersController {
     return this.usersService.findCurrentUser(req.user.id);
   }
 
+  @Get(":id")
+  findOne(@Req() req: any, @Param("id") id: string) {
+    const user = req.user;
+    if (user.role !== "admin" && user.id !== +id) {
+      throw new ForbiddenException("Access denied");
+    }
+    return this.usersService.findOne(+id);
+  }
+
   @Post()
+  @Roles("admin")
   create(@Body(new ValidationPipe()) body: CreateUserDto) {
     return this.usersService.create(body);
   }
 
   @Patch(":id")
-  update(@Param("id") id: string, @Body() body: UpdateUserDto) {
+  update(
+    @Req() req: any,
+    @Param("id") id: string,
+    @Body() body: UpdateUserDto
+  ) {
+    const user = req.user;
+    if (user.role !== "admin" && user.id !== +id) {
+      throw new ForbiddenException("Access denied");
+    }
+    if (user.role !== "admin") {
+      delete (body as any).role;
+    }
     return this.usersService.update(+id, body);
   }
 
   @Delete(":id")
+  @Roles("admin")
   remove(@Param("id") id: string) {
     return this.usersService.remove(+id);
   }

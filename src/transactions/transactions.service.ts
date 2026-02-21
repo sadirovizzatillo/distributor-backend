@@ -59,4 +59,10 @@ export class TransactionService {
       where: eq(transactions.orderId, orderId)
     });
   }
+
+  async getOrderWithOwner(orderId: number) {
+    return db.query.orders.findFirst({
+      where: eq(orders.id, orderId)
+    });
+  }
 }

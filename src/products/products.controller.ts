@@ -2,10 +2,13 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Param,
   Patch,
-  Post, Query,
+  Post,
+  Query,
+  Req,
   UseGuards,
   ValidationPipe
 } from "@nestjs/common";
@@ -20,11 +23,14 @@ export class ProductsController {
   constructor(private productsService: ProductsService) {}
 
   @Get()
-  findAll(@Query("userId") userId: string) {
-    if(userId){
-      return this.productsService.findAllByUserId(userId)
+  findAll(@Req() req: any, @Query("userId") userId: string) {
+    const user = req.user;
+    if (user.role === "admin") {
+      return userId
+        ? this.productsService.findAllByUserId(userId)
+        : this.productsService.findAll();
     }
-    return this.productsService.findAll();
+    return this.productsService.findAllByUserId(String(user.id));
   }
 
   @Get(":id")
@@ -33,17 +39,29 @@ export class ProductsController {
   }
 
   @Post()
-  async create(@Body(new ValidationPipe()) body: CreateProductDto) {
+  async create(@Req() req: any, @Body(new ValidationPipe()) body: CreateProductDto) {
+    const user = req.user;
+    if (user.role !== "admin") {
+      body.userId = user.id;
+    }
     return this.productsService.create(body);
   }
 
   @Patch(":id")
-  update(@Param("id") id: string, @Body() dto: UpdateProductDto) {
+  async update(@Req() req: any, @Param("id") id: string, @Body() dto: UpdateProductDto) {
+    const user = req.user;
+    if (user.role !== "admin") {
+      await this.productsService.verifyOwnership(+id, user.id);
+    }
     return this.productsService.update(+id, dto);
   }
 
   @Delete(":id")
-  remove(@Param("id") id: string) {
+  async remove(@Req() req: any, @Param("id") id: string) {
+    const user = req.user;
+    if (user.role !== "admin") {
+      await this.productsService.verifyOwnership(+id, user.id);
+    }
     return this.productsService.remove(+id);
   }
 }

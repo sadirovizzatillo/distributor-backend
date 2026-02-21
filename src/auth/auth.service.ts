@@ -41,6 +41,7 @@ export class AuthService {
     if (!user) throw new BadRequestException("User not found");
     console.log(dto.password, user.password);
 
+    console.log(await bcrypt.hash(dto.password, 10));
     const isMatch = await bcrypt.compare(dto.password, user.password);
     // const isMatch = dto.password === user.password;
     if (!isMatch) throw new UnauthorizedException("Invalid credentials");

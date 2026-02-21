@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { db } from "../db/db";
 import { employees, users } from "../db/schema";
 import { eq } from "drizzle-orm";
@@ -59,6 +59,18 @@ export class EmployeesService {
       })
       .from(employees)
       .where(eq(employees.id, id)).leftJoin(users, eq(users.id, employees.userId));
+    return employee;
+  }
+
+  async verifyOwnership(employeeId: number, distributorId: number) {
+    const [employee] = await db
+      .select()
+      .from(employees)
+      .where(eq(employees.id, employeeId));
+    if (!employee) throw new NotFoundException("Employee not found");
+    if (employee.distributorId !== distributorId) {
+      throw new ForbiddenException("Access denied");
+    }
     return employee;
   }
 

@@ -1,6 +1,7 @@
 import {
   Injectable,
   BadRequestException,
+  ForbiddenException,
   NotFoundException
 } from "@nestjs/common";
 import { db } from "../db/db";
@@ -168,6 +169,15 @@ export class OrdersService {
 
       return { ...orderRow, items: orderItemsList };
     });
+  }
+
+  async verifyOwnership(orderId: number, userId: number) {
+    const [order] = await db.select().from(orders).where(eq(orders.id, orderId));
+    if (!order) throw new NotFoundException("Order not found");
+    if (order.userId !== userId) {
+      throw new ForbiddenException("Access denied");
+    }
+    return order;
   }
 
   async findAllByUserId(filters: OrderFilters) {

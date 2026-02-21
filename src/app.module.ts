@@ -13,6 +13,9 @@ import { PaymentModule } from "./payments/payment.module";
 import { StatisticsModule } from "./statistics/statistics.module";
 import { AdminModule } from "./admin/admin.module";
 import { DistributorModule } from "./distributor/distributor.module";
+import { AuditModule } from "./audit/audit.module";
+import { AlertsModule } from "./alerts/alerts.module";
+import { SettingsModule } from "./settings/settings.module";
 
 @Module({
   imports: [
@@ -28,7 +31,10 @@ import { DistributorModule } from "./distributor/distributor.module";
     PaymentModule,
     StatisticsModule,
     AdminModule,
-    DistributorModule
+    DistributorModule,
+    AuditModule,
+    AlertsModule,
+    SettingsModule
     // TelegramModule
   ]
 })

@@ -13,6 +13,307 @@ import { eq, and, gte, lt, lte, sql, desc, asc, count } from "drizzle-orm";
 
 @Injectable()
 export class DistributorService {
+  // Statistics - Unified endpoint for Statistics page
+  async getStatistics(userId: number, days: number = 30) {
+    const now = new Date();
+    const startOfDay = new Date(now);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(now);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const startOfYesterday = new Date(yesterday);
+    startOfYesterday.setHours(0, 0, 0, 0);
+    const endOfYesterday = new Date(yesterday);
+    endOfYesterday.setHours(23, 59, 59, 999);
+
+    const periodStart = new Date(now);
+    periodStart.setDate(periodStart.getDate() - days);
+
+    // Debt aging date boundaries
+    const sevenDaysAgo = new Date(now);
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const thirtyDaysAgo = new Date(now);
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const sixtyDaysAgo = new Date(now);
+    sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+
+    const [
+      salesToday,
+      ordersToday,
+      paymentsToday,
+      newShopsToday,
+      newEmployeesToday,
+      salesYesterday,
+      ordersYesterday,
+      paymentsYesterday,
+      periodOrders,
+      periodPayments,
+      periodActiveShops,
+      periodNewShops,
+      dailyDataResult,
+      topProductsResult,
+      topShopsResult,
+      paymentMethodsResult,
+      shopsWithDebt
+    ] = await Promise.all([
+      // Today's sales
+      db
+        .select({ total: sql<string>`COALESCE(SUM(${orders.totalPrice}::numeric), 0)` })
+        .from(orders)
+        .where(and(eq(orders.userId, userId), gte(orders.createdAt, startOfDay), lt(orders.createdAt, endOfDay))),
+      // Today's orders count
+      db
+        .select({ count: count() })
+        .from(orders)
+        .where(and(eq(orders.userId, userId), gte(orders.createdAt, startOfDay), lt(orders.createdAt, endOfDay))),
+      // Today's payments
+      db
+        .select({ total: sql<string>`COALESCE(SUM(CASE WHEN ${payments.amount}::numeric > 0 THEN ${payments.amount}::numeric ELSE 0 END), 0)` })
+        .from(payments)
+        .where(and(eq(payments.userId, userId), gte(payments.createdAt, startOfDay), lt(payments.createdAt, endOfDay))),
+      // New shops today
+      db
+        .select({ count: count() })
+        .from(shops)
+        .where(and(eq(shops.userId, userId), gte(shops.createdAt, startOfDay))),
+      // New employees today
+      db
+        .select({ count: count() })
+        .from(employees)
+        .where(and(eq(employees.distributorId, userId), gte(employees.id, 0))),
+      // Yesterday's sales
+      db
+        .select({ total: sql<string>`COALESCE(SUM(${orders.totalPrice}::numeric), 0)` })
+        .from(orders)
+        .where(and(eq(orders.userId, userId), gte(orders.createdAt, startOfYesterday), lt(orders.createdAt, endOfYesterday))),
+      // Yesterday's orders count
+      db
+        .select({ count: count() })
+        .from(orders)
+        .where(and(eq(orders.userId, userId), gte(orders.createdAt, startOfYesterday), lt(orders.createdAt, endOfYesterday))),
+      // Yesterday's payments
+      db
+        .select({ total: sql<string>`COALESCE(SUM(CASE WHEN ${payments.amount}::numeric > 0 THEN ${payments.amount}::numeric ELSE 0 END), 0)` })
+        .from(payments)
+        .where(and(eq(payments.userId, userId), gte(payments.createdAt, startOfYesterday), lt(payments.createdAt, endOfYesterday))),
+      // Period: total orders + sales
+      db
+        .select({
+          totalSales: sql<string>`COALESCE(SUM(${orders.totalPrice}::numeric), 0)`,
+          totalOrders: count()
+        })
+        .from(orders)
+        .where(and(eq(orders.userId, userId), gte(orders.createdAt, periodStart))),
+      // Period: total payments
+      db
+        .select({ total: sql<string>`COALESCE(SUM(CASE WHEN ${payments.amount}::numeric > 0 THEN ${payments.amount}::numeric ELSE 0 END), 0)` })
+        .from(payments)
+        .where(and(eq(payments.userId, userId), gte(payments.createdAt, periodStart))),
+      // Period: active shops (distinct shops with orders)
+      db
+        .select({ count: sql<number>`COUNT(DISTINCT ${orders.shopId})` })
+        .from(orders)
+        .where(and(eq(orders.userId, userId), gte(orders.createdAt, periodStart))),
+      // Period: new shops
+      db
+        .select({ count: count() })
+        .from(shops)
+        .where(and(eq(shops.userId, userId), gte(shops.createdAt, periodStart))),
+      // Daily data (sales, orders, payments per day)
+      db.execute(sql`
+        SELECT
+          d.date,
+          COALESCE(o.sales, 0) as sales,
+          COALESCE(o.orders, 0) as orders,
+          COALESCE(p.payments, 0) as payments
+        FROM (
+          SELECT generate_series(
+            ${periodStart}::date,
+            ${now}::date,
+            '1 day'::interval
+          )::date as date
+        ) d
+        LEFT JOIN (
+          SELECT DATE(created_at) as date,
+            SUM(total_price::numeric) as sales,
+            COUNT(*) as orders
+          FROM orders
+          WHERE user_id = ${userId} AND created_at >= ${periodStart}
+          GROUP BY DATE(created_at)
+        ) o ON d.date = o.date
+        LEFT JOIN (
+          SELECT DATE(created_at) as date,
+            SUM(CASE WHEN amount::numeric > 0 THEN amount::numeric ELSE 0 END) as payments
+          FROM payments
+          WHERE user_id = ${userId} AND created_at >= ${periodStart}
+          GROUP BY DATE(created_at)
+        ) p ON d.date = p.date
+        ORDER BY d.date ASC
+      `),
+      // Top 5 products
+      db.execute(sql`
+        SELECT
+          p.id,
+          p.name,
+          p.price::numeric as price,
+          COALESCE(SUM(oi.quantity), 0) as total_sold,
+          COALESCE(SUM(oi.quantity * oi.price_at_time::numeric), 0) as total_revenue
+        FROM products p
+        INNER JOIN order_items oi ON p.id = oi.product_id
+        INNER JOIN orders o ON oi.order_id = o.id
+        WHERE p.user_id = ${userId}
+          AND o.created_at >= ${periodStart}
+        GROUP BY p.id, p.name, p.price
+        ORDER BY total_sold DESC
+        LIMIT 5
+      `),
+      // Top 5 shops
+      db.execute(sql`
+        SELECT
+          s.id,
+          s.name,
+          s.owner_name,
+          s.total_debt::numeric as total_debt,
+          COALESCE(SUM(o.total_price::numeric), 0) as total_sales,
+          COUNT(o.id) as order_count,
+          (SELECT EXTRACT(DAY FROM NOW() - MAX(p.created_at))
+           FROM payments p WHERE p.shop_id = s.id AND p.amount::numeric > 0
+          ) as days_since_last_payment,
+          (SELECT MAX(o2.created_at)
+           FROM orders o2 WHERE o2.shop_id = s.id
+          ) as last_order_date
+        FROM shops s
+        LEFT JOIN orders o ON s.id = o.shop_id AND o.created_at >= ${periodStart}
+        WHERE s.user_id = ${userId}
+        GROUP BY s.id, s.name, s.owner_name, s.total_debt
+        ORDER BY total_sales DESC
+        LIMIT 5
+      `),
+      // Payment methods breakdown
+      db.execute(sql`
+        SELECT
+          payment_method,
+          COALESCE(SUM(CASE WHEN amount::numeric > 0 THEN amount::numeric ELSE 0 END), 0) as total
+        FROM payments
+        WHERE user_id = ${userId}
+          AND created_at >= ${periodStart}
+        GROUP BY payment_method
+      `),
+      // Shops with debt (for aging)
+      db
+        .select({
+          id: shops.id,
+          totalDebt: shops.totalDebt,
+          createdAt: shops.createdAt
+        })
+        .from(shops)
+        .where(and(eq(shops.userId, userId), sql`${shops.totalDebt}::numeric > 0`))
+    ]);
+
+    // Calculate % change helpers
+    const calcChange = (today: number, yesterday: number): number => {
+      if (yesterday === 0) return today > 0 ? 100 : 0;
+      return Number((((today - yesterday) / yesterday) * 100).toFixed(1));
+    };
+
+    const todaySalesNum = Number(salesToday[0]?.total || 0);
+    const todayOrdersNum = ordersToday[0]?.count || 0;
+    const todayPaymentsNum = Number(paymentsToday[0]?.total || 0);
+    const yesterdaySalesNum = Number(salesYesterday[0]?.total || 0);
+    const yesterdayOrdersNum = ordersYesterday[0]?.count || 0;
+    const yesterdayPaymentsNum = Number(paymentsYesterday[0]?.total || 0);
+
+    const periodTotalSales = Number(periodOrders[0]?.totalSales || 0);
+    const periodTotalOrders = periodOrders[0]?.totalOrders || 0;
+
+    // Debt aging: categorize shops
+    const debtAgingTotals = { current: 0, overdue7: 0, overdue30: 0, overdue60: 0 };
+
+    // For each shop with debt, find oldest unpaid order
+    const agingPromises = shopsWithDebt.map(async (shop) => {
+      const [oldestOrder] = await db
+        .select({ createdAt: orders.createdAt })
+        .from(orders)
+        .where(and(eq(orders.shopId, shop.id), sql`${orders.remainingAmount}::numeric > 0`))
+        .orderBy(asc(orders.createdAt))
+        .limit(1);
+
+      const ageDate = oldestOrder?.createdAt || shop.createdAt;
+      const debtAmount = Number(shop.totalDebt);
+
+      if (ageDate >= sevenDaysAgo) {
+        debtAgingTotals.current += debtAmount;
+      } else if (ageDate >= thirtyDaysAgo) {
+        debtAgingTotals.overdue7 += debtAmount;
+      } else if (ageDate >= sixtyDaysAgo) {
+        debtAgingTotals.overdue30 += debtAmount;
+      } else {
+        debtAgingTotals.overdue60 += debtAmount;
+      }
+    });
+
+    await Promise.all(agingPromises);
+
+    return {
+      today: {
+        sales: todaySalesNum,
+        salesChange: calcChange(todaySalesNum, yesterdaySalesNum),
+        orders: todayOrdersNum,
+        ordersChange: calcChange(todayOrdersNum, yesterdayOrdersNum),
+        paymentsReceived: todayPaymentsNum,
+        paymentsChange: calcChange(todayPaymentsNum, yesterdayPaymentsNum),
+        newShops: newShopsToday[0]?.count || 0,
+        newEmployees: newEmployeesToday[0]?.count || 0
+      },
+      period: {
+        days,
+        totalSales: periodTotalSales,
+        totalOrders: periodTotalOrders,
+        totalPayments: Number(periodPayments[0]?.total || 0),
+        activeShops: periodActiveShops[0]?.count || 0,
+        newShops: periodNewShops[0]?.count || 0,
+        averageOrderValue: periodTotalOrders > 0
+          ? Number((periodTotalSales / periodTotalOrders).toFixed(2))
+          : 0
+      },
+      dailyData: dailyDataResult.rows.map((row: any) => ({
+        date: row.date,
+        sales: Number(row.sales),
+        orders: Number(row.orders),
+        payments: Number(row.payments)
+      })),
+      topProducts: topProductsResult.rows.map((row: any) => ({
+        id: row.id,
+        name: row.name,
+        price: Number(row.price),
+        totalSold: Number(row.total_sold),
+        totalRevenue: Number(row.total_revenue)
+      })),
+      topShops: topShopsResult.rows.map((row: any) => ({
+        id: row.id,
+        name: row.name,
+        ownerName: row.owner_name,
+        totalDebt: Number(row.total_debt),
+        totalSales: Number(row.total_sales),
+        orderCount: Number(row.order_count),
+        daysSinceLastPayment: row.days_since_last_payment != null ? Number(row.days_since_last_payment) : null,
+        lastOrderDate: row.last_order_date || null
+      })),
+      paymentMethods: paymentMethodsResult.rows.map((row: any) => ({
+        method: row.payment_method,
+        total: Number(row.total)
+      })),
+      debtAging: {
+        current: Number(debtAgingTotals.current.toFixed(2)),
+        overdue7: Number(debtAgingTotals.overdue7.toFixed(2)),
+        overdue30: Number(debtAgingTotals.overdue30.toFixed(2)),
+        overdue60: Number(debtAgingTotals.overdue60.toFixed(2))
+      }
+    };
+  }
+
   // Dashboard - Personal metrics overview
   async getDashboard(userId: number) {
     const today = new Date();
