@@ -240,7 +240,32 @@ export class OrdersService {
   }
 
   async findAll() {
-    return db.select().from(orders);
+    return db
+      .select({
+        id: orders.id,
+        userId: orders.userId,
+        shopId: orders.shopId,
+        totalPrice: orders.totalPrice,
+        remainingAmount: orders.remainingAmount,
+        status: orders.status,
+        createdAt: orders.createdAt,
+        deliveredAt: orders.deliveredAt,
+        user: {
+          id: users.id,
+          name: users.name,
+          phone: users.phone,
+          role: users.role,
+        },
+        shop: {
+          id: shops.id,
+          name: shops.name,
+          phone: shops.phone,
+          ownerName: shops.ownerName,
+        },
+      })
+      .from(orders)
+      .leftJoin(users, eq(orders.userId, users.id))
+      .leftJoin(shops, eq(orders.shopId, shops.id));
   }
 
   async markAsDelivered(orderId: number) {

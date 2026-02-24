@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { db } from "../db/db";
-import { products } from "../db/schema";
+import { products, users } from "../db/schema";
 import { eq } from "drizzle-orm";
 import { CreateProductDto } from "./dto/create-product.dto";
 import { UpdateProductDto } from "./dto/update-product.dto";
@@ -16,7 +16,26 @@ export class ProductsService {
   }
 
   async findAll() {
-    return db.select().from(products);
+    const result = await db
+      .select({
+        id: products.id,
+        userId: products.userId,
+        name: products.name,
+        description: products.description,
+        price: products.price,
+        stock: products.stock,
+        createdAt: products.createdAt,
+        agentId: users.id,
+        agentName: users.name,
+        agentPhone: users.phone,
+      })
+      .from(products)
+      .leftJoin(users, eq(products.userId, users.id));
+
+    return result.map(({ agentId, agentName, agentPhone, ...product }) => ({
+      ...product,
+      agent: agentId ? { id: agentId, name: agentName, phone: agentPhone } : null,
+    }));
   }
 
   async findOne(id: number) {

@@ -115,13 +115,15 @@ export class PaymentController {
     );
   }
 
-  // Get all payments for current distributor
+  // Get all payments for current distributor (or all if admin)
   @Get()
   async getAllPayments(@Req() req: any, @Query("limit") limit?: string) {
-    const distributorId = Number(req.user.id);
     const parsedLimit = limit ? parseInt(limit) : 100;
+    if (req.user.role === "admin") {
+      return await this.paymentService.getAllPayments(parsedLimit);
+    }
     return await this.paymentService.getAllPaymentsForDistributor(
-      distributorId,
+      Number(req.user.id),
       parsedLimit
     );
   }

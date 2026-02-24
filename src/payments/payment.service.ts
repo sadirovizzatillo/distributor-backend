@@ -5,6 +5,7 @@ import {
   BadRequestException
 } from "@nestjs/common";
 import { eq, and, desc } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { payments, shops, users } from "../db/schema";
 import { db } from "../db/db";
 import { TelegramBotService } from "../telegram/telegram.service";
@@ -398,6 +399,45 @@ export class PaymentService {
       .limit(limit);
 
     return allPayments;
+  }
+
+  async getAllPayments(limit: number = 100) {
+    const receiver = alias(users, "receiver");
+    const agent = alias(users, "agent");
+
+    const result = await db
+      .select({
+        id: payments.id,
+        amount: payments.amount,
+        paymentMethod: payments.paymentMethod,
+        notes: payments.notes,
+        createdAt: payments.createdAt,
+        shop: {
+          id: shops.id,
+          name: shops.name,
+          ownerName: shops.ownerName,
+          phone: shops.phone,
+        },
+        receivedBy: {
+          id: receiver.id,
+          name: receiver.name,
+          phone: receiver.phone,
+        },
+        agentId: agent.id,
+        agentName: agent.name,
+        agentPhone: agent.phone,
+      })
+      .from(payments)
+      .leftJoin(shops, eq(payments.shopId, shops.id))
+      .leftJoin(receiver, eq(payments.receivedBy, receiver.id))
+      .leftJoin(agent, eq(payments.userId, agent.id))
+      .orderBy(desc(payments.createdAt))
+      .limit(limit);
+
+    return result.map(({ agentId, agentName, agentPhone, ...payment }) => ({
+      ...payment,
+      agent: agentId ? { id: agentId, name: agentName, phone: agentPhone } : null,
+    }));
   }
 
   async getPaymentStats(distributorId: number, shopId: number) {
