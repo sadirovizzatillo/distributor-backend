@@ -5,7 +5,7 @@ import {
   NotFoundException
 } from "@nestjs/common";
 import { db } from "../db/db";
-import { orders, orderItems, products, users, shops } from "../db/schema";
+import { orders, orderItems, products, users, shops, transactions } from "../db/schema";
 import { eq, inArray, and, gte, lte, SQL } from "drizzle-orm";
 
 export interface OrderFilters {
@@ -419,7 +419,7 @@ export class OrdersService {
   }
 
   async remove(id: number) {
-    // Deleting an order cascades to order_items because we set ON DELETE CASCADE in schema
+    await db.delete(transactions).where(eq(transactions.orderId, id));
     const [deleted] = await db
       .delete(orders)
       .where(eq(orders.id, id))
